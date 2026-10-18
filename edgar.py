@@ -3,6 +3,7 @@ import sys
 from functools import cache
 
 import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
@@ -80,6 +81,13 @@ def fetch_filing_html(url: str) -> str:
     return response.text
 
 
+def html_to_text(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "ix:header"]):
+        tag.decompose()
+    return soup.get_text(separator="\n", strip=True)
+
+
 def is_worth_summarizing(filing: dict) -> bool:
     if filing["form"] in {"10-K", "10-Q"}:
         return True
@@ -97,8 +105,9 @@ if __name__ == "__main__":
                 url = filing_url(cik, f["accession_number"], f["primary_document"])
                 print(f["filing_date"], f["form"], url)
                 html = fetch_filing_html(url)
-                print(len(html), "characters")
-                print(html[:500])
+                text = html_to_text(html)
+                print(len(text), "characters of text")
+                print(text[-2500:])
                 break
     except (ValueError, RuntimeError, requests.RequestException) as e:
         print(f"Error: {e}", file=sys.stderr)
