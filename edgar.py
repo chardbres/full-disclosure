@@ -88,6 +88,32 @@ def html_to_text(html: str) -> str:
     return soup.get_text(separator="\n", strip=True)
 
 
+def find_exhibit_url(
+    cik: int, accession_number: str, exhibit_type: str = "EX-99.1"
+) -> str | None:
+    accession_no_dashes = accession_number.replace("-", "")
+    index_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{accession_number}-index.htm"
+    soup = BeautifulSoup(fetch_filing_html(index_url), "html.parser")
+    for row in soup.select("table.tableFile tr"):
+        cells = row.find_all("td")
+        if len(cells) > 3 and cells[3].get_text(strip=True) == exhibit_type:
+            link = cells[2].find("a")
+            if link:
+                return "https://www.sec.gov" + link["href"].removeprefix("/ix?doc=")
+    return None
+
+
+def get_filing_text(cik: int, filing: dict) -> str:
+    url = filing_url(cik, filing["accession_number"], filing["primary_document"])
+    text = html_to_text(fetch_filing_html(url))
+    if filing["form"] == "8-K":
+        # Earnings and other news 8-Ks often put the substance in the attached press release
+        exhibit_url = find_exhibit_url(cik, filing["accession_number"])
+        if exhibit_url:
+            text += "\n\nEXHIBIT 99.1\n" + html_to_text(fetch_filing_html(exhibit_url))
+    return text
+
+
 def is_worth_summarizing(filing: dict) -> bool:
     if filing["form"] in {"10-K", "10-Q"}:
         return True
