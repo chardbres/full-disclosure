@@ -114,6 +114,16 @@ if __name__ == "__main__":
                 for f in edgar.get_filings(cik, since="2026-01-01")
                 if edgar.is_worth_summarizing(f)
             )
+            report_path = (
+                ANALYSES_DIR
+                / f"{ticker.upper()}-{filing['form']}-{filing['filing_date']}.md"
+            )
+            if report_path.exists():
+                print(
+                    f"Skipping {ticker}: already analyzed ({report_path})",
+                    file=sys.stderr,
+                )
+                continue
             print(filing["filing_date"], filing["form"], file=sys.stderr)
             analysis = analyze_filing(filing, edgar.get_filing_text(cik, filing))
             url = edgar.filing_url(
@@ -122,10 +132,6 @@ if __name__ == "__main__":
             report = to_markdown(ticker, filing, url, analysis)
 
             ANALYSES_DIR.mkdir(exist_ok=True)
-            report_path = (
-                ANALYSES_DIR
-                / f"{ticker.upper()}-{filing['form']}-{filing['filing_date']}.md"
-            )
             report_path.write_text(report)
             print(report)
             print(f"Saved to {report_path}", file=sys.stderr)
