@@ -102,37 +102,43 @@ def to_markdown(ticker: str, filing: dict, url: str, analysis: FilingAnalysis) -
 
 
 if __name__ == "__main__":
-    my_ticker = sys.argv[1] if len(sys.argv) > 1 else "AAPL"
-    try:
-        cik = edgar.find_cik(my_ticker)
-        filing = next(
-            f
-            for f in edgar.get_filings(cik, since="2026-01-01")
-            if edgar.is_worth_summarizing(f)
-        )
-        print(filing["filing_date"], filing["form"], file=sys.stderr)
-        analysis = analyze_filing(filing, edgar.get_filing_text(cik, filing))
-        url = edgar.filing_url(
-            cik, filing["accession_number"], filing["primary_document"]
-        )
-        report = to_markdown(my_ticker, filing, url, analysis)
+    tickers = sys.argv[1:] or ["AAPL"]
+    failed = []
+    for ticker in tickers:
+        try:
+            cik = edgar.find_cik(ticker)
+            filing = next(
+                f
+                for f in edgar.get_filings(cik, since="2026-01-01")
+                if edgar.is_worth_summarizing(f)
+            )
+            print(filing["filing_date"], filing["form"], file=sys.stderr)
+            analysis = analyze_filing(filing, edgar.get_filing_text(cik, filing))
+            url = edgar.filing_url(
+                cik, filing["accession_number"], filing["primary_document"]
+            )
+            report = to_markdown(ticker, filing, url, analysis)
 
-        ANALYSES_DIR.mkdir(exist_ok=True)
-        report_path = (
-            ANALYSES_DIR
-            / f"{my_ticker.upper()}-{filing['form']}-{filing['filing_date']}.md"
-        )
-        report_path.write_text(report)
-        print(report)
-        print(f"Saved to {report_path}", file=sys.stderr)
-    except StopIteration:
-        print(f"Error: no filings worth summarizing for {my_ticker}", file=sys.stderr)
-        sys.exit(1)
-    except (
-        ValueError,
-        RuntimeError,
-        requests.RequestException,
-        anthropic.APIError,
-    ) as e:
-        print(f"Error: {e}", file=sys.stderr)
+            ANALYSES_DIR.mkdir(exist_ok=True)
+            report_path = (
+                ANALYSES_DIR
+                / f"{ticker.upper()}-{filing['form']}-{filing['filing_date']}.md"
+            )
+            report_path.write_text(report)
+            print(report)
+            print(f"Saved to {report_path}", file=sys.stderr)
+        except StopIteration:
+            print(f"Error: no filings worth summarizing for {ticker}", file=sys.stderr)
+            failed.append(ticker)
+        except (
+            ValueError,
+            RuntimeError,
+            requests.RequestException,
+            anthropic.APIError,
+        ) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            failed.append(ticker)
+
+    if failed:
+        print(f"Failed: {', '.join(failed)}", file=sys.stderr)
         sys.exit(1)
