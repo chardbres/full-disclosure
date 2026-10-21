@@ -31,10 +31,12 @@ class FilingAnalysis(BaseModel):
         description="Two to four sentences, in plain English, on what the filing says"
     )
     key_changes: list[str] = Field(
-        description="Material changes from prior periods or prior disclosures, one sentence each"
+        description="Up to six of the most material changes from prior periods "
+        "or prior disclosures, one sentence each, most important first"
     )
     risks: list[str] = Field(
-        description="The most significant risks, with new or newly emphasized risks first"
+        description="Up to six of the most significant risks, with new or newly "
+        "emphasized risks first"
     )
     sentiment_score: int = Field(
         description="Overall tone for investors, from -5 (very negative) to 5 (very positive), with 0 neutral"
