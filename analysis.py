@@ -1,15 +1,15 @@
 import sys
 from functools import cache
-from pathlib import Path
 
 import anthropic
+import psycopg
 import requests
 from pydantic import BaseModel, Field
 
+import db
 import edgar
 
 MODEL = "claude-sonnet-5-5"
-ANALYSES_DIR = Path("analyses")
 
 SYSTEM_PROMPT = """You analyze SEC filings for investors.
 
@@ -106,46 +106,53 @@ def to_markdown(ticker: str, filing: dict, url: str, analysis: FilingAnalysis) -
 if __name__ == "__main__":
     tickers = sys.argv[1:] or ["AAPL"]
     failed = []
-    for ticker in tickers:
-        try:
-            cik = edgar.find_cik(ticker)
-            filing = next(
-                f
-                for f in edgar.get_filings(cik, since="2026-01-01")
-                if edgar.is_worth_summarizing(f)
-            )
-            report_path = (
-                ANALYSES_DIR
-                / f"{ticker.upper()}-{filing['form']}-{filing['filing_date']}.md"
-            )
-            if report_path.exists():
+    try:
+        conn = db.connect()
+    except (RuntimeError, psycopg.Error) as e:
+        print(f"Error: could not connect to the database: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    with conn:
+        for ticker in tickers:
+            try:
+                cik = edgar.find_cik(ticker)
+                filing = next(
+                    f
+                    for f in edgar.get_filings(cik, since="2026-01-01")
+                    if edgar.is_worth_summarizing(f)
+                )
+                if db.is_analyzed(conn, filing["accession_number"]):
+                    print(
+                        f"Skipping {ticker}: {filing['form']} filed "
+                        f"{filing['filing_date']} is already analyzed",
+                        file=sys.stderr,
+                    )
+                    continue
+                print(filing["filing_date"], filing["form"], file=sys.stderr)
+                analysis = analyze_filing(filing, edgar.get_filing_text(cik, filing))
+                url = edgar.filing_url(
+                    cik, filing["accession_number"], filing["primary_document"]
+                )
+                db.save_analysis(
+                    conn, ticker, cik, filing, url, MODEL, analysis.model_dump()
+                )
+                print(to_markdown(ticker, filing, url, analysis))
+                print(f"Saved {ticker} to the database", file=sys.stderr)
+            except StopIteration:
                 print(
-                    f"Skipping {ticker}: already analyzed ({report_path})",
+                    f"Error: no filings worth summarizing for {ticker}",
                     file=sys.stderr,
                 )
-                continue
-            print(filing["filing_date"], filing["form"], file=sys.stderr)
-            analysis = analyze_filing(filing, edgar.get_filing_text(cik, filing))
-            url = edgar.filing_url(
-                cik, filing["accession_number"], filing["primary_document"]
-            )
-            report = to_markdown(ticker, filing, url, analysis)
-
-            ANALYSES_DIR.mkdir(exist_ok=True)
-            report_path.write_text(report)
-            print(report)
-            print(f"Saved to {report_path}", file=sys.stderr)
-        except StopIteration:
-            print(f"Error: no filings worth summarizing for {ticker}", file=sys.stderr)
-            failed.append(ticker)
-        except (
-            ValueError,
-            RuntimeError,
-            requests.RequestException,
-            anthropic.APIError,
-        ) as e:
-            print(f"Error: {e}", file=sys.stderr)
-            failed.append(ticker)
+                failed.append(ticker)
+            except (
+                ValueError,
+                RuntimeError,
+                requests.RequestException,
+                anthropic.APIError,
+                psycopg.Error,
+            ) as e:
+                print(f"Error ({ticker}): {e}", file=sys.stderr)
+                failed.append(ticker)
 
     if failed:
         print(f"Failed: {', '.join(failed)}", file=sys.stderr)
