@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{padded_cik}.json"
 WANTED_FORMS = {"10-K", "10-Q", "8-K"}
-INTERESTING_ITEMS = {"1.01", "2.02", "4.02", "5.02"}
+INTERESTING_ITEMS = {"1.01", "1.02", "1.03", "1.05", "2.01", "2.02", "2.04", "2.05", "2.06", "3.01", "4.01", "4.02", "5.01","5.02"}
 
 load_dotenv()
 
