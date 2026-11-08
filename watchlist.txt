@@ -1,0 +1,11 @@
+# Companies the daily job analyzes, one ticker per line
+AAPL
+MSFT
+NVDA
+AMZN
+GOOGL
+META
+TSLA
+JPM
+COST
+NFLX

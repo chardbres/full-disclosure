@@ -1,0 +1,27 @@
+name: Analyze new filings
+
+on:
+  schedule:
+    # Every day at 12:00 UTC, early morning in the US
+    - cron: "0 12 * * *"
+  # Lets you start a run by hand from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # Analyzes each company's latest filing worth summarizing, skipping any
+      # that are already in the database
+      - run: python analysis.py $(grep -v '^#' watchlist.txt)
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

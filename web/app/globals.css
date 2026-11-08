@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
+
+  /* Paper, panels and hairlines */
+  --color-paper: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-line: #e2e5ea;
+
+  /* Text, from strongest to weakest */
+  --color-ink: #0e1a2b;
+  --color-ink-2: #3d4a5c;
+  --color-muted: #687384;
+  --color-brand: #0b2545;
+
+  /* Sentiment is diverging: red for negative, blue for positive, gray at
+     zero. Blue and red stay apart for colorblind readers, where red and
+     green don't, and every score also shows its sign and a label. */
+  --color-negative: #b42318;
+  --color-negative-soft: #fbe4e1;
+  --color-positive: #1f5fae;
+  --color-positive-soft: #e3ecf8;
+  --color-neutral: #8a94a3;
+  --color-neutral-soft: #eceef1;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
