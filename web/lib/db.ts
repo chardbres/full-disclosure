@@ -18,6 +18,10 @@ export function db(): Sql {
       prepare: false,
       // Serverless functions handle one request at a time
       max: 1,
+      // Send one query at a time. Supabase's transaction pooler hangs when
+      // queries are pipelined, which happens whenever several pages render
+      // at once, as during a build.
+      max_pipeline: 1,
     });
   }
   return globalForDb.sql;
