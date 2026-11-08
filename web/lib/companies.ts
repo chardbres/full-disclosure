@@ -35,15 +35,17 @@ export function displayName(title: string): string {
     .join(" ");
 }
 
-export async function getCompanyNames(): Promise<Record<string, string>> {
-  "use cache";
-  cacheLife("days");
+// The SEC can be slow to answer requests from cloud servers, so give up after
+// a few seconds rather than hold up the page.
+const TIMEOUT_MS = 5000;
 
+async function fetchCompanyNames(): Promise<Record<string, string>> {
   const userAgent = process.env.SEC_USER_AGENT;
   if (!userAgent) return {};
   try {
     const response = await fetch(TICKERS_URL, {
       headers: { "User-Agent": userAgent },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!response.ok) return {};
     const entries: Record<string, TickerEntry> = await response.json();
@@ -54,4 +56,18 @@ export async function getCompanyNames(): Promise<Record<string, string>> {
     // Names are a nice-to-have. Pages fall back to tickers alone.
     return {};
   }
+}
+
+// Pages rendered at the same time, as during a build, share one download
+// instead of each asking the SEC, which rate-limits heavy use.
+let pending: Promise<Record<string, string>> | undefined;
+
+export async function getCompanyNames(): Promise<Record<string, string>> {
+  "use cache";
+  cacheLife("days");
+
+  pending ??= fetchCompanyNames().finally(() => {
+    pending = undefined;
+  });
+  return pending;
 }
