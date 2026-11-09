@@ -3,7 +3,7 @@ import StatTile from "@/components/StatTile";
 import { getFilings } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 
-export default async function Home() {
+const Home = async () => {
   const filings = await getFilings();
   const companies = new Set(filings.map((filing) => filing.ticker)).size;
 
@@ -34,4 +34,6 @@ export default async function Home() {
       </div>
     </>
   );
-}
+};
+
+export default Home;

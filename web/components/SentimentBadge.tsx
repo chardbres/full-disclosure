@@ -8,13 +8,13 @@ const SWATCH = {
 
 // The colored square carries the tone. The score and label stay in text
 // colors so they read the same for everyone.
-export default function SentimentBadge({
+const SentimentBadge = ({
   score,
   showLabel = true,
 }: {
   score: number;
   showLabel?: boolean;
-}) {
+}) => {
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
       <span aria-hidden className={`size-2.5 rounded-sm ${SWATCH[sentimentTone(score)]}`} />
@@ -22,4 +22,6 @@ export default function SentimentBadge({
       {showLabel && <span className="text-muted">{sentimentLabel(score)}</span>}
     </span>
   );
-}
+};
+
+export default SentimentBadge;

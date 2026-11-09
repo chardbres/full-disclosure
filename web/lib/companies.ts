@@ -21,7 +21,7 @@ const SUFFIXES: Record<string, string> = {
 // with a state suffix like "/DE/". Turn those into "Berkshire Hathaway Inc".
 // Short words and ones with symbols, like "AT&T" or "IBM", stay as they are,
 // and names already in mixed case are left alone.
-export function displayName(title: string): string {
+export const displayName = (title: string): string => {
   const name = title.replace(/\s*\/[A-Z]+\/?$/, "").trim();
   if (name !== name.toUpperCase()) return name;
   return name
@@ -33,13 +33,13 @@ export function displayName(title: string): string {
       return word[0] + word.slice(1).toLowerCase();
     })
     .join(" ");
-}
+};
 
 // The SEC can be slow to answer requests from cloud servers, so give up after
 // a few seconds rather than hold up the page.
 const TIMEOUT_MS = 5000;
 
-async function fetchCompanyNames(): Promise<Record<string, string>> {
+const fetchCompanyNames = async (): Promise<Record<string, string>> => {
   const userAgent = process.env.SEC_USER_AGENT;
   if (!userAgent) return {};
   try {
@@ -56,13 +56,13 @@ async function fetchCompanyNames(): Promise<Record<string, string>> {
     // Names are a nice-to-have. Pages fall back to tickers alone.
     return {};
   }
-}
+};
 
 // Pages rendered at the same time, as during a build, share one download
 // instead of each asking the SEC, which rate-limits heavy use.
 let pending: Promise<Record<string, string>> | undefined;
 
-export async function getCompanyNames(): Promise<Record<string, string>> {
+export const getCompanyNames = async (): Promise<Record<string, string>> => {
   "use cache";
   cacheLife("days");
 
@@ -70,4 +70,4 @@ export async function getCompanyNames(): Promise<Record<string, string>> {
     pending = undefined;
   });
   return pending;
-}
+};

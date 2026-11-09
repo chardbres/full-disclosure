@@ -7,7 +7,7 @@ const TRACK = { negative: "bg-negative-soft", positive: "bg-positive-soft" };
 
 // A diverging bar from -5 to +5. Segments fill outward from zero to the
 // score, in red below zero and blue above it.
-export default function SentimentScale({ score }: { score: number }) {
+const SentimentScale = ({ score }: { score: number }) => {
   const label = sentimentLabel(score);
   return (
     <div>
@@ -45,4 +45,6 @@ export default function SentimentScale({ score }: { score: number }) {
       </div>
     </div>
   );
-}
+};
+
+export default SentimentScale;

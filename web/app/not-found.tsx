@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export default function NotFound() {
+const NotFound = () => {
   return (
     <div className="mx-auto max-w-md py-16 text-center">
       <h1 className="font-serif text-3xl font-semibold text-ink">Page not found</h1>
@@ -16,4 +16,6 @@ export default function NotFound() {
       </Link>
     </div>
   );
-}
+};
+
+export default NotFound;

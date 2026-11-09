@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     "Plain-English summaries of 10-K, 10-Q and 8-K filings from SEC EDGAR: what changed, the key risks and the tone for investors.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+const RootLayout = ({ children }: LayoutProps<"/">) => {
   return (
     <html
       lang="en"
@@ -35,4 +35,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </body>
     </html>
   );
-}
+};
+
+export default RootLayout;

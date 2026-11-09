@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const GITHUB_URL = "https://github.com/chardbres/full-disclosure";
 
-export default function SiteHeader() {
+const SiteHeader = () => {
   return (
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
@@ -31,4 +31,6 @@ export default function SiteHeader() {
       </div>
     </header>
   );
-}
+};
+
+export default SiteHeader;

@@ -27,26 +27,26 @@ export interface FilingAnalysis extends FilingSummary {
 
 // A filing can be analyzed more than once, for example with a newer model.
 // Pages show the most recent analysis of each filing.
-function latestAnalyses(sql: Sql) {
+const latestAnalyses = (sql: Sql) => {
   return sql`
     select distinct on (accession_number) *
     from analyses
     order by accession_number, created_at desc
   `;
-}
+};
 
-async function withNames<T extends { ticker: string }>(
+const withNames = async <T extends { ticker: string }>(
   rows: T[],
-): Promise<(T & { companyName: string | null })[]> {
+): Promise<(T & { companyName: string | null })[]> => {
   const names = await getCompanyNames();
   // The SEC lists share classes like BRK.B as BRK-B
   return rows.map((row) => ({
     ...row,
     companyName: names[row.ticker.replace(".", "-")] ?? null,
   }));
-}
+};
 
-export async function getFilings(): Promise<FilingSummary[]> {
+export const getFilings = async (): Promise<FilingSummary[]> => {
   "use cache";
   cacheLife("hours");
 
@@ -60,11 +60,11 @@ export async function getFilings(): Promise<FilingSummary[]> {
     order by f.filing_date desc, f.ticker
   `;
   return withNames(rows);
-}
+};
 
-export async function getFiling(
+export const getFiling = async (
   accessionNumber: string,
-): Promise<FilingAnalysis | null> {
+): Promise<FilingAnalysis | null> => {
   "use cache";
   cacheLife("hours");
 
@@ -83,13 +83,13 @@ export async function getFiling(
   if (!rows.length) return null;
   const [filing] = await withNames(rows);
   return filing;
-}
+};
 
 // The most recent filings, prerendered at build time. Others render on
 // their first visit.
-export async function getRecentAccessionNumbers(
+export const getRecentAccessionNumbers = async (
   limit = 50,
-): Promise<string[]> {
+): Promise<string[]> => {
   "use cache";
   cacheLife("hours");
 
@@ -100,4 +100,4 @@ export async function getRecentAccessionNumbers(
     limit ${limit}
   `;
   return rows.map((row) => row.accessionNumber);
-}
+};

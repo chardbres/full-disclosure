@@ -28,7 +28,7 @@ const STACK = [
   ["Website", "Next.js, React, TypeScript, Tailwind CSS, on Vercel"],
 ];
 
-export default function AboutPage() {
+const AboutPage = () => {
   return (
     <div className="max-w-3xl">
       <h1 className="font-serif text-4xl font-semibold tracking-tight text-ink">
@@ -74,4 +74,6 @@ export default function AboutPage() {
       </p>
     </div>
   );
-}
+};
+
+export default AboutPage;

@@ -5,7 +5,7 @@ const globalForDb = globalThis as typeof globalThis & { sql?: Sql };
 
 // One connection pool per server instance, kept on globalThis so hot reloads
 // in development don't open a new pool each time.
-export function db(): Sql {
+export const db = (): Sql => {
   if (!globalForDb.sql) {
     const url = process.env.DATABASE_URL;
     if (!url) {
@@ -25,4 +25,4 @@ export function db(): Sql {
     });
   }
   return globalForDb.sql;
-}
+};

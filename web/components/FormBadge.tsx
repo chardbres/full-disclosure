@@ -1,6 +1,6 @@
 import { FORM_DESCRIPTIONS } from "@/lib/format";
 
-export default function FormBadge({ form }: { form: string }) {
+const FormBadge = ({ form }: { form: string }) => {
   return (
     <span
       title={FORM_DESCRIPTIONS[form]}
@@ -9,4 +9,6 @@ export default function FormBadge({ form }: { form: string }) {
       {form}
     </span>
   );
-}
+};
+
+export default FormBadge;

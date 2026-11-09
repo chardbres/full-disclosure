@@ -9,16 +9,16 @@ import SentimentBadge from "./SentimentBadge";
 
 const FORMS: (Form | "All")[] = ["All", "10-K", "10-Q", "8-K"];
 
-function matches(filing: FilingSummary, query: string) {
+const matches = (filing: FilingSummary, query: string) => {
   const q = query.trim().toLowerCase();
   return (
     !q ||
     filing.ticker.toLowerCase().includes(q) ||
     (filing.companyName?.toLowerCase().includes(q) ?? false)
   );
-}
+};
 
-export default function FilingTable({ filings }: { filings: FilingSummary[] }) {
+const FilingTable = ({ filings }: { filings: FilingSummary[] }) => {
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<Form | "All">("All");
 
@@ -127,4 +127,6 @@ export default function FilingTable({ filings }: { filings: FilingSummary[] }) {
       )}
     </section>
   );
-}
+};
+
+export default FilingTable;

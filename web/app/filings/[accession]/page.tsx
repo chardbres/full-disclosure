@@ -10,31 +10,31 @@ import { FORM_DESCRIPTIONS, formatDate } from "@/lib/format";
 // SEC accession numbers look like 0000320193-26-000105
 const ACCESSION_NUMBER = /^\d{10}-\d{2}-\d{6}$/;
 
-async function findFiling(accession: string) {
+const findFiling = async (accession: string) => {
   return ACCESSION_NUMBER.test(accession) ? getFiling(accession) : null;
-}
+};
 
-export async function generateStaticParams() {
+export const generateStaticParams = async () => {
   const recent = await getRecentAccessionNumbers();
   // Cache Components needs at least one entry. With an empty database the
   // placeholder renders as not found.
   return recent.length
     ? recent.map((accession) => ({ accession }))
     : [{ accession: "none" }];
-}
+};
 
-export async function generateMetadata({
+export const generateMetadata = async ({
   params,
-}: PageProps<"/filings/[accession]">): Promise<Metadata> {
+}: PageProps<"/filings/[accession]">): Promise<Metadata> => {
   const filing = await findFiling((await params).accession);
   if (!filing) return { title: "Filing not found" };
   return {
     title: `${filing.ticker} ${filing.form}, filed ${formatDate(filing.filingDate)}`,
     description: filing.summary,
   };
-}
+};
 
-export default function FilingPage({ params }: PageProps<"/filings/[accession]">) {
+const FilingPage = ({ params }: PageProps<"/filings/[accession]">) => {
   return (
     <>
       <Link href="/" className="text-sm font-medium text-ink-2 hover:text-ink">
@@ -45,18 +45,20 @@ export default function FilingPage({ params }: PageProps<"/filings/[accession]">
       </Suspense>
     </>
   );
-}
+};
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export default FilingPage;
+
+const Section = ({ title, children }: { title: string; children: React.ReactNode }) => {
   return (
     <section className="rounded-lg border border-line bg-surface p-6">
       <h2 className="font-serif text-xl font-semibold text-ink">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
-}
+};
 
-function NumberedList({ items, empty }: { items: string[]; empty: string }) {
+const NumberedList = ({ items, empty }: { items: string[]; empty: string }) => {
   if (!items.length) return <p className="text-ink-2">{empty}</p>;
   return (
     <ol className="space-y-3">
@@ -70,9 +72,9 @@ function NumberedList({ items, empty }: { items: string[]; empty: string }) {
       ))}
     </ol>
   );
-}
+};
 
-async function FilingDetails({ params }: Pick<PageProps<"/filings/[accession]">, "params">) {
+const FilingDetails = async ({ params }: Pick<PageProps<"/filings/[accession]">, "params">) => {
   const filing = await findFiling((await params).accession);
   if (!filing) notFound();
 
@@ -138,4 +140,4 @@ async function FilingDetails({ params }: Pick<PageProps<"/filings/[accession]">,
       </div>
     </article>
   );
-}
+};
