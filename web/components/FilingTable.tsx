@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { FilingSummary, Form } from "@/lib/data";
-import { formatDate } from "@/lib/format";
+import { formatDate, tickerKey } from "@/lib/format";
+import CompanySearch from "./CompanySearch";
 import FormBadge from "./FormBadge";
 import SentimentBadge from "./SentimentBadge";
 
@@ -33,17 +34,7 @@ const FilingTable = ({ filings }: { filings: FilingSummary[] }) => {
           Latest filings
         </h2>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <label className="sr-only" htmlFor="filing-search">
-            Search by ticker or company
-          </label>
-          <input
-            id="filing-search"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search ticker or company"
-            className="h-9 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-2 focus:outline-brand/20 sm:w-64"
-          />
+          <CompanySearch value={query} onChange={setQuery} />
           <div
             role="group"
             aria-label="Filter by form"
@@ -102,9 +93,13 @@ const FilingTable = ({ filings }: { filings: FilingSummary[] }) => {
                       {filing.ticker}
                     </Link>
                     {filing.companyName && (
-                      <span className="block max-w-48 truncate text-xs text-muted">
+                      // Sits above the row's stretched link, so it can be clicked on its own
+                      <Link
+                        href={`/companies/${tickerKey(filing.ticker)}`}
+                        className="relative z-10 block max-w-48 truncate text-xs text-muted hover:text-ink hover:underline"
+                      >
                         {filing.companyName}
-                      </span>
+                      </Link>
                     )}
                   </td>
                   <td className="justify-self-end md:px-4 md:py-3.5 md:align-top">

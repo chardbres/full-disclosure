@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import FormBadge from "@/components/FormBadge";
 import SentimentScale from "@/components/SentimentScale";
 import { getFiling, getRecentAccessionNumbers } from "@/lib/data";
-import { FORM_DESCRIPTIONS, formatDate } from "@/lib/format";
+import { FORM_DESCRIPTIONS, formatDate, tickerKey } from "@/lib/format";
 
 // SEC accession numbers look like 0000320193-26-000105
 const ACCESSION_NUMBER = /^\d{10}-\d{2}-\d{6}$/;
@@ -97,9 +97,12 @@ const FilingDetails = async ({ params }: Pick<PageProps<"/filings/[accession]">,
           <h1 className="mt-3 font-serif text-4xl font-semibold tracking-tight text-ink">
             {filing.companyName ?? filing.ticker}
           </h1>
-          {filing.companyName && (
-            <p className="mt-1 font-semibold text-ink-2">{filing.ticker}</p>
-          )}
+          <Link
+            href={`/companies/${tickerKey(filing.ticker)}`}
+            className="mt-1 inline-block font-semibold text-ink-2 hover:text-ink hover:underline"
+          >
+            {filing.ticker} · All filings →
+          </Link>
         </div>
         <a
           href={filing.url}

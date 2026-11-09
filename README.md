@@ -19,7 +19,10 @@ results.
   tables. [`reader.sql`](reader.sql) creates the read-only login the website
   uses.
 - **Website** ([`web/`](web)): Next.js and TypeScript, deployed on Vercel.
-  Pages are cached for an hour, so new analyses appear without a redeploy.
+  It lists every analysis, and each company has a page with its analyses and
+  its recent EDGAR filings. Search suggests companies from the SEC's full
+  list. Pages are cached for an hour, so new analyses appear without a
+  redeploy.
 
 ## Running the pipeline locally
 

@@ -5,8 +5,8 @@ const NotFound = () => {
     <div className="mx-auto max-w-md py-16 text-center">
       <h1 className="font-serif text-3xl font-semibold text-ink">Page not found</h1>
       <p className="mt-3 text-ink-2">
-        There&rsquo;s nothing at this address. If you followed a link to a
-        filing, it may not have been analyzed yet.
+        There&rsquo;s nothing at this address. Check the ticker or link, or
+        search for a company from the filings page.
       </p>
       <Link
         href="/"

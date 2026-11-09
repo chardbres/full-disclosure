@@ -12,6 +12,8 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
+  // Turns relative links in metadata, like canonical URLs, into full ones
+  metadataBase: new URL("https://fulldisclosure.rickbresnahan.com"),
   title: {
     default: "Full Disclosure: SEC filings, summarized",
     template: "%s · Full Disclosure",

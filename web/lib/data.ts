@@ -2,7 +2,9 @@ import "server-only";
 import { cacheLife } from "next/cache";
 import type { Sql } from "postgres";
 import { db } from "./db";
-import { getCompanyNames } from "./companies";
+import { getCompanies } from "./companies";
+import { type EdgarFiling, getRecentFilings } from "./edgar";
+import { tickerKey } from "./format";
 
 export type Form = "10-K" | "10-Q" | "8-K";
 
@@ -38,11 +40,10 @@ const latestAnalyses = (sql: Sql) => {
 const withNames = async <T extends { ticker: string }>(
   rows: T[],
 ): Promise<(T & { companyName: string | null })[]> => {
-  const names = await getCompanyNames();
-  // The SEC lists share classes like BRK.B as BRK-B
+  const companies = await getCompanies();
   return rows.map((row) => ({
     ...row,
-    companyName: names[row.ticker.replace(".", "-")] ?? null,
+    companyName: companies[tickerKey(row.ticker)]?.name ?? null,
   }));
 };
 
@@ -100,4 +101,34 @@ export const getRecentAccessionNumbers = async (
     limit ${limit}
   `;
   return rows.map((row) => row.accessionNumber);
+};
+
+export interface CompanyOverview {
+  ticker: string;
+  name: string | null;
+  cik: number | null;
+  analyzed: FilingSummary[];
+  // null when EDGAR couldn't be reached
+  edgarFilings: EdgarFiling[] | null;
+}
+
+// Everything the company page shows. A company counts if the SEC lists it or
+// it has analyses, so the page still works if the SEC's list can't be loaded.
+export const getCompany = async (ticker: string): Promise<CompanyOverview | null> => {
+  const key = tickerKey(ticker);
+  const [companies, filings] = await Promise.all([getCompanies(), getFilings()]);
+  const company = companies[key];
+  const analyzed = filings.filter((filing) => tickerKey(filing.ticker) === key);
+  if (!company && !analyzed.length) return null;
+
+  const edgarFilings = company
+    ? await getRecentFilings(company.cik).catch(() => null)
+    : null;
+  return {
+    ticker: key,
+    name: company?.name ?? analyzed[0]?.companyName ?? null,
+    cik: company?.cik ?? null,
+    analyzed,
+    edgarFilings,
+  };
 };

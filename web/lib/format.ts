@@ -34,3 +34,8 @@ export const FORM_DESCRIPTIONS: Record<string, string> = {
   "10-Q": "Quarterly report",
   "8-K": "Current report",
 };
+
+// Tickers in the form the SEC's list uses, so "brk.b" becomes "BRK-B"
+export const tickerKey = (ticker: string): string => {
+  return ticker.trim().toUpperCase().replaceAll(".", "-");
+};
