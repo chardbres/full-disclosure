@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import AnalyzePanel from "@/components/AnalyzePanel";
 import FormBadge from "@/components/FormBadge";
 import SentimentBadge from "@/components/SentimentBadge";
-import { getCompany, getFilings } from "@/lib/data";
+import { getAdmin } from "@/lib/auth";
+import { type CompanyOverview, getCompany, getFilings } from "@/lib/data";
 import { formatDate, tickerKey } from "@/lib/format";
 
 // Letters, digits, dots and dashes, like AAPL or BRK-B
@@ -78,6 +80,10 @@ const CompanyDetails = async ({ params }: Pick<PageProps<"/companies/[ticker]">,
           </a>
         )}
       </header>
+
+      <Suspense fallback={null}>
+        <AnalyzeSection company={company} />
+      </Suspense>
 
       <section className="mt-8" aria-labelledby="analyzed-heading">
         <h2 id="analyzed-heading" className="font-serif text-2xl font-semibold text-ink">
@@ -162,4 +168,15 @@ const CompanyDetails = async ({ params }: Pick<PageProps<"/companies/[ticker]">,
       </section>
     </article>
   );
+};
+
+// The Analyze panel, for the admin only. It reads the session cookie, so it
+// sits in its own Suspense boundary and the rest of the page stays prerendered.
+const AnalyzeSection = async ({ company }: { company: CompanyOverview }) => {
+  if (!company.edgarFilings || !(await getAdmin())) return null;
+  const analyzed = new Set(company.analyzed.map((filing) => filing.accessionNumber));
+  const pending = company.edgarFilings
+    .filter((filing) => !analyzed.has(filing.accessionNumber))
+    .map(({ form, filingDate }) => ({ form, filingDate }));
+  return <AnalyzePanel ticker={company.ticker} pending={pending} />;
 };

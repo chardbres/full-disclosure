@@ -34,18 +34,33 @@ interface Submissions {
 }
 
 // A company's filings worth summarizing from the last `days` days, newest
-// first. Throws if EDGAR can't be reached, so a failure isn't cached.
-export const getRecentFilings = async (cik: number, days = 365): Promise<EdgarFiling[]> => {
+// first, or null if EDGAR can't be reached. It returns null rather than
+// throwing, because an error inside a cached function fails the build. A
+// failure is kept only briefly, so the next visit tries again.
+export const getRecentFilings = async (
+  cik: number,
+  days = 365,
+): Promise<EdgarFiling[] | null> => {
   "use cache";
+
+  let submissions: Submissions;
+  try {
+    const response = await fetch(
+      SUBMISSIONS_URL.replace("{cik}", String(cik).padStart(10, "0")),
+      {
+        headers: { "User-Agent": process.env.SEC_USER_AGENT ?? "" },
+        signal: AbortSignal.timeout(SEC_TIMEOUT_MS),
+      },
+    );
+    if (!response.ok) throw new Error(`EDGAR returned ${response.status}`);
+    submissions = await response.json();
+  } catch {
+    cacheLife("minutes");
+    return null;
+  }
   cacheLife("hours");
 
-  const response = await fetch(SUBMISSIONS_URL.replace("{cik}", String(cik).padStart(10, "0")), {
-    headers: { "User-Agent": process.env.SEC_USER_AGENT ?? "" },
-    signal: AbortSignal.timeout(SEC_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new Error(`EDGAR returned ${response.status}`);
-  const { recent } = ((await response.json()) as Submissions).filings;
-
+  const { recent } = submissions.filings;
   const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
   return recent.form
     .map((form, i) => ({ form, i }))

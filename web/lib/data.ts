@@ -1,5 +1,5 @@
 import "server-only";
-import { cacheLife } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 import type { Sql } from "postgres";
 import { db } from "./db";
 import { getCompanies } from "./companies";
@@ -27,6 +27,10 @@ export interface FilingAnalysis extends FilingSummary {
   analyzedOn: string;
 }
 
+// Tags every cached database query, so /api/revalidate can refresh them all
+// when the pipeline saves new analyses
+export const FILINGS_TAG = "filings";
+
 // A filing can be analyzed more than once, for example with a newer model.
 // Pages show the most recent analysis of each filing.
 const latestAnalyses = (sql: Sql) => {
@@ -50,6 +54,7 @@ const withNames = async <T extends { ticker: string }>(
 export const getFilings = async (): Promise<FilingSummary[]> => {
   "use cache";
   cacheLife("hours");
+  cacheTag(FILINGS_TAG);
 
   const sql = db();
   const rows = await sql<Omit<FilingSummary, "companyName">[]>`
@@ -68,6 +73,7 @@ export const getFiling = async (
 ): Promise<FilingAnalysis | null> => {
   "use cache";
   cacheLife("hours");
+  cacheTag(FILINGS_TAG);
 
   const sql = db();
   const rows = await sql<Omit<FilingAnalysis, "companyName">[]>`
@@ -93,6 +99,7 @@ export const getRecentAccessionNumbers = async (
 ): Promise<string[]> => {
   "use cache";
   cacheLife("hours");
+  cacheTag(FILINGS_TAG);
 
   const rows = await db()<{ accessionNumber: string }[]>`
     select accession_number as "accessionNumber"
@@ -121,9 +128,7 @@ export const getCompany = async (ticker: string): Promise<CompanyOverview | null
   const analyzed = filings.filter((filing) => tickerKey(filing.ticker) === key);
   if (!company && !analyzed.length) return null;
 
-  const edgarFilings = company
-    ? await getRecentFilings(company.cik).catch(() => null)
-    : null;
+  const edgarFilings = company ? await getRecentFilings(company.cik) : null;
   return {
     ticker: key,
     name: company?.name ?? analyzed[0]?.companyName ?? null,

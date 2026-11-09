@@ -15,6 +15,9 @@ results.
   ([`analyze.yml`](.github/workflows/analyze.yml)) runs the pipeline every day
   over [`watchlist.txt`](watchlist.txt). It analyzes every filing worth
   summarizing from the past 7 days, and skips filings already in the database.
+  The same workflow can be started for any ticker and lookback window, from the
+  Actions tab or the website's admin-only Analyze button. When it finishes, it
+  tells the website to show the new analyses right away.
 - **Database:** Postgres on Supabase. [`schema.sql`](schema.sql) creates the
   tables. [`reader.sql`](reader.sql) creates the read-only login the website
   uses.
@@ -72,6 +75,10 @@ npm run dev
    Then set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
    and `ADMIN_EMAIL` in Vercel and redeploy. Without them the site is
    read-only.
+5. Optional, for the Analyze button: create a fine-grained GitHub token with
+   access to only this repo and "Actions: Read and write", and set it in
+   Vercel as `GITHUB_DISPATCH_TOKEN`. Set the same random `REVALIDATE_SECRET`
+   in Vercel and as a GitHub Actions secret.
 
 ## Design notes
 

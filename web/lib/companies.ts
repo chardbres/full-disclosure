@@ -47,15 +47,16 @@ export const displayName = (title: string): string => {
 // a few seconds rather than hold up the page.
 export const SEC_TIMEOUT_MS = 5000;
 
-const fetchCompanies = async (): Promise<Record<string, Company>> => {
+// null if the SEC can't be reached
+const fetchCompanies = async (): Promise<Record<string, Company> | null> => {
   const userAgent = process.env.SEC_USER_AGENT;
-  if (!userAgent) return {};
+  if (!userAgent) return null;
   try {
     const response = await fetch(TICKERS_URL, {
       headers: { "User-Agent": userAgent },
       signal: AbortSignal.timeout(SEC_TIMEOUT_MS),
     });
-    if (!response.ok) return {};
+    if (!response.ok) return null;
     const entries: Record<string, TickerEntry> = await response.json();
     return Object.fromEntries(
       Object.values(entries).map((entry) => [
@@ -64,25 +65,30 @@ const fetchCompanies = async (): Promise<Record<string, Company>> => {
       ]),
     );
   } catch {
-    // Names are a nice-to-have. Pages fall back to tickers alone.
-    return {};
+    return null;
   }
 };
 
 // Pages rendered at the same time, as during a build, share one download
 // instead of each asking the SEC, which rate-limits heavy use.
-let pending: Promise<Record<string, Company>> | undefined;
+let pending: Promise<Record<string, Company> | null> | undefined;
 
 // Every company the SEC lists, keyed by ticker, in the SEC's order, which is
-// roughly largest first
+// roughly largest first. If the SEC can't be reached it returns an empty list,
+// so pages fall back to tickers alone, and keeps that only briefly.
 export const getCompanies = async (): Promise<Record<string, Company>> => {
   "use cache";
-  cacheLife("days");
 
   pending ??= fetchCompanies().finally(() => {
     pending = undefined;
   });
-  return pending;
+  const companies = await pending;
+  if (!companies) {
+    cacheLife("minutes");
+    return {};
+  }
+  cacheLife("days");
+  return companies;
 };
 
 // Up to `limit` companies matching a search, best matches first: the exact

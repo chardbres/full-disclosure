@@ -1,16 +1,39 @@
 name: Analyze new filings
 
+# Names each run in the Actions tab, such as "Analyze NVDA, 90 days"
+run-name: >-
+  ${{ inputs.tickers && format('Analyze {0}, {1} days{2}', inputs.tickers, inputs.days, inputs.dry_run && ' (preview)' || '') || 'Analyze the watchlist' }}
+
 on:
   schedule:
     # Every day at 12:00 UTC, early morning in the US
     - cron: "0 12 * * *"
-  # Lets you start a run by hand from the Actions tab
+  # Started by hand from the Actions tab, or by the website's Analyze button
   workflow_dispatch:
+    inputs:
+      tickers:
+        description: Tickers separated by spaces. Leave empty for the watchlist.
+        type: string
+        default: ""
+      days:
+        description: How many days back to look
+        type: number
+        default: 7
+      dry_run:
+        description: Only list the filings, without calling Claude
+        type: boolean
+        default: false
+
+# Runs for the same tickers wait for each other instead of overlapping, so a
+# filing can't be analyzed twice. Runs for different tickers go side by side.
+concurrency:
+  group: analyze-${{ inputs.tickers || 'watchlist' }}
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Up to 15 filings at a minute or two each
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -18,11 +41,44 @@ jobs:
           python-version: "3.14"
           cache: pip
       - run: pip install -r requirements.txt
-      # Analyzes every filing worth summarizing from the past week that isn't
-      # in the database yet. A week covers several filings on one day and a
-      # few missed runs.
-      - run: python analysis.py --days 7 $(grep -v '^#' watchlist.txt)
+
+      # Analyzes every filing worth summarizing from the past `days` days that
+      # isn't in the database yet. The daily run looks back a week, which
+      # covers several filings on one day and a few missed runs.
+      - name: Analyze filings
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Inputs reach the script as environment variables, never pasted
+          # into it, and are checked below before they're used
+          TICKERS: ${{ inputs.tickers }}
+          DAYS: ${{ inputs.days || 7 }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          if [ -z "$TICKERS" ]; then
+            TICKERS=$(grep -v '^#' watchlist.txt | tr '\n' ' ')
+          fi
+          if ! [[ "$TICKERS" =~ ^[A-Za-z0-9.\ -]{1,500}$ && "$DAYS" =~ ^[0-9]{1,3}$ ]]; then
+            echo "Invalid tickers or days" >&2
+            exit 1
+          fi
+          # $TICKERS is unquoted on purpose, to pass each ticker separately
+          python analysis.py --days "$DAYS" $DRY_RUN $TICKERS
+
+      # Tells the website to show the new analyses now, instead of when its
+      # hour-long cache runs out. Runs even if some filings failed, since the
+      # others were saved.
+      - name: Refresh the website
+        if: ${{ !cancelled() && !inputs.dry_run }}
+        continue-on-error: true
+        env:
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+        run: |
+          if [ -z "$REVALIDATE_SECRET" ]; then
+            echo "REVALIDATE_SECRET isn't set, so the site will update within the hour"
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 -X POST \
+            -H "Authorization: Bearer $REVALIDATE_SECRET" \
+            https://fulldisclosure.rickbresnahan.com/api/revalidate

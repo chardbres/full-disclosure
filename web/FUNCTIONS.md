@@ -1,7 +1,7 @@
 # Website functions
 
 Every top-level function in the website, grouped by folder, with what it does.
-There are 52.
+There are 56.
 
 - **`app/`**: routes. Next.js finds each page by its folder and calls it by
   name.
@@ -13,7 +13,8 @@ There are 52.
 Functions marked **cached** start with `"use cache"`. Next.js saves the result
 and reuses it until the time in `cacheLife` runs out ("hours" is about an hour,
 "days" is about a day). Pages that use them load without a database call or SEC
-request most of the time.
+request most of the time. Functions marked **tagged** are the database queries,
+which `/api/revalidate` refreshes as soon as new analyses are saved.
 
 ## lib/: data and helpers
 
@@ -29,9 +30,9 @@ request most of the time.
 |---|---|
 | `latestAnalyses` | A SQL fragment that picks the newest analysis of each filing, since a filing can be analyzed more than once. The queries below build on it. |
 | `withNames` | Adds each row's company name from the SEC's list. The database stores only tickers. |
-| `getFilings` | **Cached.** Every analyzed filing, newest first, with its summary and sentiment. Feeds the home page table and stats. |
-| `getFiling` | **Cached.** One filing's full analysis (summary, key changes, risks, sentiment and details) for its page. |
-| `getRecentAccessionNumbers` | **Cached.** The 50 newest filings' IDs, which tells Next.js which filing pages to build ahead of time. |
+| `getFilings` | **Cached, tagged.** Every analyzed filing, newest first, with its summary and sentiment. Feeds the home page table and stats. |
+| `getFiling` | **Cached, tagged.** One filing's full analysis (summary, key changes, risks, sentiment and details) for its page. |
+| `getRecentAccessionNumbers` | **Cached, tagged.** The 50 newest filings' IDs, which tells Next.js which filing pages to build ahead of time. |
 | `getCompany` | Everything a company page shows: its name, its analyzed filings and its recent EDGAR filings. It finds companies in the SEC's list or the database, so a page still works if one of them is unavailable. |
 
 ### lib/companies.ts
@@ -39,15 +40,15 @@ request most of the time.
 | Function | What it does |
 |---|---|
 | `displayName` | Tidies SEC company names, so "BERKSHIRE HATHAWAY INC /DE/" becomes "Berkshire Hathaway Inc". |
-| `fetchCompanies` | Downloads the SEC's list of about 10,000 companies (ticker, CIK and name). It gives up after 5 seconds and returns nothing on failure, so pages fall back to tickers. |
-| `getCompanies` | **Cached.** The SEC list keyed by ticker. Pages rendered at the same moment share one download, so a build doesn't trip the SEC's rate limit. |
+| `fetchCompanies` | Downloads the SEC's list of about 10,000 companies (ticker, CIK and name). It gives up after 5 seconds and returns null on failure. |
+| `getCompanies` | **Cached.** The SEC list keyed by ticker. Pages rendered at the same moment share one download, so a build doesn't trip the SEC's rate limit. If the download fails, pages fall back to tickers, and the failure is cached for about a minute instead of a day. |
 | `searchCompanies` | The best matches for a search, ranked: the exact ticker, then tickers starting with the text, then names starting with it, then names containing a word that starts with it. |
 
 ### lib/edgar.ts
 
 | Function | What it does |
 |---|---|
-| `getRecentFilings` | **Cached.** A company's filings worth summarizing from the past year, read from EDGAR. Its rules match the pipeline's `edgar.py`. It throws when EDGAR can't be reached, so the failure isn't cached and the page says so. |
+| `getRecentFilings` | **Cached.** A company's filings worth summarizing from the past year, read from EDGAR. Its rules match the pipeline's `edgar.py`. If EDGAR can't be reached it returns null and the page says so. It doesn't throw, because an error inside a cached function fails the build. A failure is cached for about a minute instead of hours. |
 
 ### lib/auth.ts
 
@@ -64,6 +65,12 @@ Server actions: functions that forms call, which run on the server.
 |---|---|
 | `sendSignInLink` | Emails a sign-in link to an existing account. The page shows the same message whether or not the account exists, so it can't be used to check who has one. |
 | `signOut` | Ends the session and returns to the home page. |
+
+### lib/analysis-actions.ts
+
+| Function | What it does |
+|---|---|
+| `startAnalysis` | The Analyze button's server action. It checks `getAdmin` first, validates the ticker and lookback window, then asks GitHub's API to start the analysis workflow for that ticker. It returns a message for the panel to show. |
 
 ### lib/format.ts
 
@@ -122,6 +129,7 @@ Server actions: functions that forms call, which run on the server.
 | `generateMetadata` | The tab title and description, such as "Nvidia Corp (NVDA) filings", plus the canonical address. |
 | `CompanyPage` | The page shell: the back link, with the details inside a `Suspense` boundary. |
 | `CompanyDetails` | The company header, its analyzed filings and its recent EDGAR filings, each marked analyzed or not. |
+| `AnalyzeSection` | Shows the Analyze panel to the admin only, with the company's EDGAR filings that aren't analyzed yet. It reads the session, so it has its own `Suspense` boundary and the rest of the page stays prerendered. |
 
 ### app/login/page.tsx (/login)
 
@@ -135,6 +143,12 @@ Server actions: functions that forms call, which run on the server.
 | Function | What it does |
 |---|---|
 | `GET` | Where sign-in links land. It swaps Supabase's one-time code for a session cookie, then goes to the home page, or back to /login with an error. |
+
+### app/api/revalidate/route.ts (POST /api/revalidate)
+
+| Function | What it does |
+|---|---|
+| `POST` | Called by the GitHub Action after it saves analyses. With the right secret, it marks every cached database query stale, so new analyses show on the next page load instead of up to an hour later. |
 
 ### app/api/companies/route.ts (/api/companies?q=…)
 
@@ -153,6 +167,7 @@ Server actions: functions that forms call, which run on the server.
 | `FilingTable` | The home page table, with search and the 10-K, 10-Q and 8-K filter. On phones each row becomes a card. |
 | `matches` | Whether a filing matches the search text, by ticker or company name. Used by `FilingTable`. |
 | `CompanySearch` | The search box. It filters the table as you type and suggests companies from `/api/companies`. Choosing one, or pressing Enter on an exact ticker, opens the company page. It supports the arrow keys, Enter and Escape. |
+| `AnalyzePanel` | The admin's Analyze panel: choose 30 days, 90 days or a year, see how many unanalyzed filings that covers by form, optionally preview only, and start the run. It shows whether GitHub started it. |
 | `FormBadge` | The small "10-K" label. Hovering shows what the form is. |
 | `SentimentBadge` | A colored square, the score and a word, such as "+2 Leans positive". The words carry the meaning, so color isn't needed to read it. |
 | `SentimentScale` | The −5 to +5 bar on the filing page, filled from zero toward the score. |
