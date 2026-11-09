@@ -13,8 +13,8 @@ results.
   `db.py`.
 - **Schedule:** a GitHub Actions workflow
   ([`analyze.yml`](.github/workflows/analyze.yml)) runs the pipeline every day
-  over [`watchlist.txt`](watchlist.txt). Filings already in the database are
-  skipped.
+  over [`watchlist.txt`](watchlist.txt). It analyzes every filing worth
+  summarizing from the past 7 days, and skips filings already in the database.
 - **Database:** Postgres on Supabase. [`schema.sql`](schema.sql) creates the
   tables. [`reader.sql`](reader.sql) creates the read-only login the website
   uses.
@@ -29,6 +29,21 @@ python -m venv .venv
 cp .env.example .env   # then fill in the values
 .venv/bin/python analysis.py AAPL MSFT
 .venv/bin/pytest
+```
+
+`analysis.py` takes these options:
+
+- `--days N`: how many days back to look for filings. The default is 7.
+- `--max N`: the most filings to analyze in one run. The default is 15. A run
+  that reaches the limit lists the filings it left, and the next run picks
+  them up.
+- `--dry-run`: list the filings that would be analyzed, without calling Claude
+  or saving anything.
+
+For example, to see what a year of Nvidia's filings would involve:
+
+```sh
+.venv/bin/python analysis.py --days 365 --dry-run NVDA
 ```
 
 ## Running the website locally

@@ -1,4 +1,6 @@
+import argparse
 import sys
+from collections import Counter
 from functools import cache
 
 import anthropic
@@ -103,9 +105,139 @@ def to_markdown(ticker: str, filing: dict, url: str, analysis: FilingAnalysis) -
 """
 
 
+# Errors that skip one ticker or filing without stopping the rest of the run
+RECOVERABLE_ERRORS = (
+    ValueError,
+    RuntimeError,
+    requests.RequestException,
+    anthropic.APIError,
+    psycopg.Error,
+)
+
+
+def describe(ticker: str, filing: dict) -> str:
+    return (
+        f"{ticker.upper()} {filing['form']} filed {filing['filing_date']} "
+        f"({filing['accession_number']})"
+    )
+
+
+def find_new_filings(
+    conn: psycopg.Connection, tickers: list[str], days: int
+) -> tuple[list[tuple[str, int, dict]], list[str]]:
+    """Each filing worth summarizing from the last `days` days that isn't in the
+    database yet, as (ticker, cik, filing), newest first, and the tickers that
+    failed."""
+    pending, failed = [], []
+    for ticker in tickers:
+        try:
+            cik = edgar.find_cik(ticker)
+            filings = edgar.filings_to_analyze(cik, days)
+            new = [
+                f for f in filings if not db.is_analyzed(conn, f["accession_number"])
+            ]
+        except RECOVERABLE_ERRORS as e:
+            print(f"Error ({ticker}): {e}", file=sys.stderr)
+            failed.append(ticker)
+            continue
+        done = len(filings) - len(new)
+        print(
+            f"{ticker.upper()}: {len(new)} new, {done} already analyzed",
+            file=sys.stderr,
+        )
+        pending += [(ticker, cik, f) for f in new]
+    # Newest first across all companies, so a capped run does the latest news
+    pending.sort(key=lambda p: p[2]["filing_date"], reverse=True)
+    return pending, failed
+
+
+def analyze_and_save(
+    conn: psycopg.Connection, ticker: str, cik: int, filing: dict
+) -> None:
+    analysis = analyze_filing(filing, edgar.get_filing_text(cik, filing))
+    url = edgar.filing_url(cik, filing["accession_number"], filing["primary_document"])
+    db.save_analysis(conn, ticker, cik, filing, url, MODEL, analysis.model_dump())
+    print(to_markdown(ticker, filing, url, analysis))
+    print(f"Saved {describe(ticker, filing)}", file=sys.stderr)
+
+
+def run(
+    conn: psycopg.Connection,
+    tickers: list[str],
+    days: int,
+    max_filings: int,
+    dry_run: bool = False,
+) -> list[str]:
+    """Analyzes new filings for each ticker and returns what failed."""
+    pending, failed = find_new_filings(conn, tickers, days)
+    batch, over_cap = pending[:max_filings], pending[max_filings:]
+
+    if dry_run:
+        for ticker, _, filing in batch:
+            print(describe(ticker, filing))
+        counts = Counter(filing["form"] for _, _, filing in batch)
+        breakdown = ", ".join(f"{n} {form}" for form, n in sorted(counts.items()))
+        noun = "filing" if len(batch) == 1 else "filings"
+        print(
+            f"Would analyze {len(batch)} {noun}"
+            + (f": {breakdown}" if breakdown else ""),
+            # Keep this before the warnings below when output is redirected
+            flush=True,
+        )
+    else:
+        for ticker, cik, filing in batch:
+            try:
+                analyze_and_save(conn, ticker, cik, filing)
+            except RECOVERABLE_ERRORS as e:
+                print(f"Error ({describe(ticker, filing)}): {e}", file=sys.stderr)
+                failed.append(describe(ticker, filing))
+
+    if over_cap:
+        print(
+            f"Stopped at --max {max_filings}. Run again to analyze the other "
+            f"{len(over_cap)}:",
+            file=sys.stderr,
+        )
+        for ticker, _, filing in over_cap:
+            print(f"  {describe(ticker, filing)}", file=sys.stderr)
+    return failed
+
+
+def positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return number
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Analyze recent SEC filings with Claude and save them to the database."
+    )
+    parser.add_argument("tickers", nargs="+", help="ticker symbols, such as AAPL MSFT")
+    parser.add_argument(
+        "--days",
+        type=positive_int,
+        default=7,
+        help="how many days back to look for filings (default: 7)",
+    )
+    parser.add_argument(
+        "--max",
+        type=positive_int,
+        default=15,
+        dest="max_filings",
+        help="most filings to analyze in one run (default: 15)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="list the filings that would be analyzed, without calling Claude or saving",
+    )
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    tickers = sys.argv[1:] or ["AAPL"]
-    failed = []
+    args = parse_args(sys.argv[1:])
     try:
         conn = db.connect()
     except (RuntimeError, psycopg.Error) as e:
@@ -113,46 +245,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     with conn:
-        for ticker in tickers:
-            try:
-                cik = edgar.find_cik(ticker)
-                filing = next(
-                    f
-                    for f in edgar.get_filings(cik, since="2026-01-01")
-                    if edgar.is_worth_summarizing(f)
-                )
-                if db.is_analyzed(conn, filing["accession_number"]):
-                    print(
-                        f"Skipping {ticker}: {filing['form']} filed "
-                        f"{filing['filing_date']} is already analyzed",
-                        file=sys.stderr,
-                    )
-                    continue
-                print(filing["filing_date"], filing["form"], file=sys.stderr)
-                analysis = analyze_filing(filing, edgar.get_filing_text(cik, filing))
-                url = edgar.filing_url(
-                    cik, filing["accession_number"], filing["primary_document"]
-                )
-                db.save_analysis(
-                    conn, ticker, cik, filing, url, MODEL, analysis.model_dump()
-                )
-                print(to_markdown(ticker, filing, url, analysis))
-                print(f"Saved {ticker} to the database", file=sys.stderr)
-            except StopIteration:
-                print(
-                    f"Error: no filings worth summarizing for {ticker}",
-                    file=sys.stderr,
-                )
-                failed.append(ticker)
-            except (
-                ValueError,
-                RuntimeError,
-                requests.RequestException,
-                anthropic.APIError,
-                psycopg.Error,
-            ) as e:
-                print(f"Error ({ticker}): {e}", file=sys.stderr)
-                failed.append(ticker)
+        failed = run(conn, args.tickers, args.days, args.max_filings, args.dry_run)
 
     if failed:
         print(f"Failed: {', '.join(failed)}", file=sys.stderr)

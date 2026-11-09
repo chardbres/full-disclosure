@@ -18,9 +18,10 @@ jobs:
           python-version: "3.14"
           cache: pip
       - run: pip install -r requirements.txt
-      # Analyzes each company's latest filing worth summarizing, skipping any
-      # that are already in the database
-      - run: python analysis.py $(grep -v '^#' watchlist.txt)
+      # Analyzes every filing worth summarizing from the past week that isn't
+      # in the database yet. A week covers several filings on one day and a
+      # few missed runs.
+      - run: python analysis.py --days 7 $(grep -v '^#' watchlist.txt)
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

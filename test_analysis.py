@@ -111,3 +111,120 @@ def test_analyze_filing_max_tokens(fake_claude):
     fake_claude(stop_reason="max_tokens", parsed_output=None)
     with pytest.raises(RuntimeError, match="max_tokens"):
         analyze_filing(FILING, "Filing text.")
+
+
+# run() fakes: three filings across two companies, one already in the database
+def make_filing(form, filing_date, accession_number):
+    return {
+        "form": form,
+        "filing_date": filing_date,
+        "accession_number": accession_number,
+        "primary_document": "doc.htm",
+        "items": "",
+    }
+
+FILINGS = {
+    "AAPL": [
+        make_filing("10-K", "2026-11-03", "aapl-10k"),
+        make_filing("10-Q", "2026-08-01", "aapl-10q"),
+    ],
+    "MSFT": [make_filing("10-Q", "2026-10-29", "msft-10q")],
+    "OLD": [make_filing("10-Q", "2026-10-01", "old-10q")],
+}
+CIKS = {"AAPL": 1, "MSFT": 2, "OLD": 3}
+
+
+@pytest.fixture
+def fake_pipeline(monkeypatch):
+    """Fakes EDGAR, the database and Claude, and records what gets saved."""
+    saved = []
+    analyzed = {"old-10q"}
+
+    def find_cik(ticker):
+        if ticker not in CIKS:
+            raise ValueError(f"Unknown ticker: {ticker}")
+        return CIKS[ticker]
+
+    cik_to_ticker = {cik: ticker for ticker, cik in CIKS.items()}
+    monkeypatch.setattr(analysis.edgar, "find_cik", find_cik)
+    monkeypatch.setattr(
+        analysis.edgar, "filings_to_analyze", lambda cik, days: FILINGS[cik_to_ticker[cik]]
+    )
+    monkeypatch.setattr(analysis.edgar, "get_filing_text", lambda cik, filing: "text")
+    monkeypatch.setattr(analysis.db, "is_analyzed", lambda conn, acc: acc in analyzed)
+    monkeypatch.setattr(
+        analysis.db,
+        "save_analysis",
+        lambda conn, ticker, cik, filing, url, model, data: saved.append(filing["accession_number"]),
+    )
+    monkeypatch.setattr(analysis, "analyze_filing", lambda filing, text: make_analysis())
+    return saved
+
+
+def test_run_analyzes_new_filings_newest_first(fake_pipeline):
+    # Every new filing is analyzed, newest first across companies, and the one
+    # already in the database is skipped
+    failed = analysis.run(None, ["AAPL", "MSFT", "OLD"], days=365, max_filings=15)
+    assert fake_pipeline == ["aapl-10k", "msft-10q", "aapl-10q"]
+    assert failed == []
+
+def test_run_stops_at_max(fake_pipeline, capsys):
+    # The cap keeps the newest filings and lists the rest for the next run
+    analysis.run(None, ["AAPL", "MSFT"], days=365, max_filings=2)
+    assert fake_pipeline == ["aapl-10k", "msft-10q"]
+    assert "Run again to analyze the other 1" in capsys.readouterr().err
+
+def test_run_dry_run_saves_nothing(fake_pipeline, capsys, monkeypatch):
+    # A dry run lists the filings without calling Claude or saving
+    def fail(*args):
+        raise AssertionError("Claude was called during a dry run")
+    monkeypatch.setattr(analysis, "analyze_filing", fail)
+    analysis.run(None, ["AAPL", "MSFT"], days=365, max_filings=15, dry_run=True)
+    out = capsys.readouterr().out
+    assert fake_pipeline == []
+    assert "AAPL 10-K filed 2026-11-03 (aapl-10k)" in out
+    assert "Would analyze 3 filings: 1 10-K, 2 10-Q" in out
+
+def test_run_continues_after_failed_filing(fake_pipeline, monkeypatch):
+    # One filing failing doesn't stop the others, and it's reported
+    def analyze(filing, text):
+        if filing["accession_number"] == "msft-10q":
+            raise RuntimeError("Claude declined")
+        return make_analysis()
+    monkeypatch.setattr(analysis, "analyze_filing", analyze)
+    failed = analysis.run(None, ["AAPL", "MSFT"], days=365, max_filings=15)
+    assert fake_pipeline == ["aapl-10k", "aapl-10q"]
+    assert failed == ["MSFT 10-Q filed 2026-10-29 (msft-10q)"]
+
+def test_run_unknown_ticker(fake_pipeline):
+    # An unknown ticker is reported and the other companies still run
+    failed = analysis.run(None, ["NOPE", "MSFT"], days=365, max_filings=15)
+    assert fake_pipeline == ["msft-10q"]
+    assert failed == ["NOPE"]
+
+def test_run_dry_run_singular(fake_pipeline, capsys):
+    analysis.run(None, ["MSFT"], days=365, max_filings=15, dry_run=True)
+    assert "Would analyze 1 filing: 1 10-Q" in capsys.readouterr().out
+
+def test_run_nothing_new_is_not_a_failure(fake_pipeline):
+    # A company with no new filings is normal on most days, not an error
+    assert analysis.run(None, ["OLD"], days=7, max_filings=15) == []
+    assert fake_pipeline == []
+
+
+@pytest.mark.parametrize(
+    "argv, days, max_filings, dry_run",
+    [
+        (["AAPL"], 7, 15, False),
+        (["AAPL", "--days", "365", "--max", "3", "--dry-run"], 365, 3, True),
+    ],
+)
+def test_parse_args(argv, days, max_filings, dry_run):
+    args = analysis.parse_args(argv)
+    assert (args.days, args.max_filings, args.dry_run) == (days, max_filings, dry_run)
+
+@pytest.mark.parametrize("argv", [[], ["AAPL", "--days", "0"], ["AAPL", "--max", "-1"]])
+def test_parse_args_rejects(argv):
+    # No tickers, or a window or cap below 1, is a usage error
+    with pytest.raises(SystemExit):
+        analysis.parse_args(argv)

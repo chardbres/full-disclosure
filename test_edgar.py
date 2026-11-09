@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 import edgar
 from edgar import is_worth_summarizing, filing_url, padded_cik, html_to_text, find_cik
@@ -178,6 +180,42 @@ def test_get_filings_custom_forms(fake_submissions):
 def test_get_filings_none_match(fake_submissions):
     # A cutoff after every filing date gives an empty list rather than an error
     assert edgar.get_filings(1, since="2027-01-01") == []
+
+
+def test_filings_to_analyze_window(fake_submissions):
+    # 60 days before 2026-03-02 is 2026-01-01, so the 10-Q filed that day is
+    # included and the 10-K from the day before is not
+    filings = edgar.filings_to_analyze(1, days=60, today=date(2026, 3, 2))
+    assert [f["form"] for f in filings] == ["8-K", "10-Q"]
+
+def test_filings_to_analyze_newest_first(monkeypatch):
+    # Sorted by filing date even if the SEC's list isn't
+    monkeypatch.setattr(edgar, "get_filings", lambda cik, since: [
+        {"form": "10-Q", "filing_date": "2026-01-10", "items": ""},
+        {"form": "10-K", "filing_date": "2026-02-20", "items": ""},
+        {"form": "8-K", "filing_date": "2026-02-01", "items": "2.02"},
+    ])
+    filings = edgar.filings_to_analyze(1, days=365, today=date(2026, 3, 1))
+    assert [f["filing_date"] for f in filings] == ["2026-02-20", "2026-02-01", "2026-01-10"]
+
+def test_filings_to_analyze_skips_routine_8k(monkeypatch):
+    # An 8-K with only routine items, like Regulation FD, isn't worth analyzing
+    monkeypatch.setattr(edgar, "get_filings", lambda cik, since: [
+        {"form": "8-K", "filing_date": "2026-02-01", "items": "7.01,9.01"},
+        {"form": "10-Q", "filing_date": "2026-01-10", "items": ""},
+    ])
+    filings = edgar.filings_to_analyze(1, days=365, today=date(2026, 3, 1))
+    assert [f["form"] for f in filings] == ["10-Q"]
+
+def test_filings_to_analyze_passes_cutoff(monkeypatch):
+    # The cutoff sent to get_filings is `days` before today, as YYYY-MM-DD
+    seen = {}
+    def fake_get_filings(cik, since):
+        seen["since"] = since
+        return []
+    monkeypatch.setattr(edgar, "get_filings", fake_get_filings)
+    edgar.filings_to_analyze(1, days=7, today=date(2026, 3, 1))
+    assert seen["since"] == "2026-02-22"
 
 
 # find_exhibit_url downloads a filing's index page and looks through its

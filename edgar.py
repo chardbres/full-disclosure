@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import date, timedelta
 from functools import cache
 
 import requests
@@ -118,6 +119,13 @@ def is_worth_summarizing(filing: dict) -> bool:
     if filing["form"] in {"10-K", "10-Q"}:
         return True
     return bool(set(filing["items"].split(",")) & INTERESTING_ITEMS)
+
+
+def filings_to_analyze(cik: int, days: int, today: date | None = None) -> list[dict]:
+    """Filings worth summarizing from the last `days` days, newest first."""
+    since = ((today or date.today()) - timedelta(days=days)).isoformat()
+    filings = [f for f in get_filings(cik, since=since) if is_worth_summarizing(f)]
+    return sorted(filings, key=lambda f: f["filing_date"], reverse=True)
 
 
 if __name__ == "__main__":
