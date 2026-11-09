@@ -67,6 +67,11 @@ npm run dev
 3. Import the repo into Vercel with `web` as the root directory. Set
    `DATABASE_URL` to the read-only `fd_reader` login on the transaction pooler
    (port 6543), and set `SEC_USER_AGENT`.
+4. Optional, for the admin sign-in: in Supabase, turn off new sign-ups, add
+   the admin's account and add `<site>/auth/callback` to the redirect URLs.
+   Then set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   and `ADMIN_EMAIL` in Vercel and redeploy. Without them the site is
+   read-only.
 
 ## Design notes
 

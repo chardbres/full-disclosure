@@ -1,13 +1,14 @@
 # Website functions
 
 Every top-level function in the website, grouped by folder, with what it does.
-There are 43.
+There are 52.
 
 - **`app/`**: routes. Next.js finds each page by its folder and calls it by
   name.
 - **`components/`**: pieces of the interface.
-- **`lib/`**: data and helpers. Everything that talks to the database or the
-  SEC lives here.
+- **`lib/`**: data and helpers. Everything that talks to the database, the SEC
+  or Supabase Auth lives here.
+- **`proxy.ts`**: runs before every page request.
 
 Functions marked **cached** start with `"use cache"`. Next.js saves the result
 and reuses it until the time in `cacheLife` runs out ("hours" is about an hour,
@@ -47,6 +48,22 @@ request most of the time.
 | Function | What it does |
 |---|---|
 | `getRecentFilings` | **Cached.** A company's filings worth summarizing from the past year, read from EDGAR. Its rules match the pipeline's `edgar.py`. It throws when EDGAR can't be reached, so the failure isn't cached and the page says so. |
+
+### lib/auth.ts
+
+| Function | What it does |
+|---|---|
+| `supabaseServer` | A Supabase client for this request, reading and writing the session in its cookies. |
+| `getAdmin` | The signed-in user if it's the admin (`ADMIN_EMAIL`), otherwise null. Supabase checks the session with its server, so a forged cookie fails. Anything only the admin may do checks this first. Returns null when sign-in isn't set up. |
+
+### lib/auth-actions.ts
+
+Server actions: functions that forms call, which run on the server.
+
+| Function | What it does |
+|---|---|
+| `sendSignInLink` | Emails a sign-in link to an existing account. The page shows the same message whether or not the account exists, so it can't be used to check who has one. |
+| `signOut` | Ends the session and returns to the home page. |
 
 ### lib/format.ts
 
@@ -106,6 +123,19 @@ request most of the time.
 | `CompanyPage` | The page shell: the back link, with the details inside a `Suspense` boundary. |
 | `CompanyDetails` | The company header, its analyzed filings and its recent EDGAR filings, each marked analyzed or not. |
 
+### app/login/page.tsx (/login)
+
+| Function | What it does |
+|---|---|
+| `LoginPage` | The sign-in page shell. Nothing links to it, and search engines are told to skip it. |
+| `LoginForm` | Shows the email form, the "link is on its way" message, or "you're signed in", plus any error, such as an expired link. |
+
+### app/auth/callback/route.ts (/auth/callback)
+
+| Function | What it does |
+|---|---|
+| `GET` | Where sign-in links land. It swaps Supabase's one-time code for a session cookie, then goes to the home page, or back to /login with an error. |
+
 ### app/api/companies/route.ts (/api/companies?q=…)
 
 | Function | What it does |
@@ -117,6 +147,7 @@ request most of the time.
 | Function | What it does |
 |---|---|
 | `SiteHeader` | The logo and the Filings, About and GitHub links. |
+| `AdminStatus` | The thin "Signed in as … · Sign out" bar above the header, shown only to the admin. It's the only part of a page that reads the session, so the rest can still be built ahead of time. |
 | `SiteFooter` | The disclaimer ("not investment advice") and the credit. |
 | `StatTile` | One labeled number on the home page, such as "Filings analyzed: 11". |
 | `FilingTable` | The home page table, with search and the 10-K, 10-Q and 8-K filter. On phones each row becomes a card. |
@@ -125,3 +156,9 @@ request most of the time.
 | `FormBadge` | The small "10-K" label. Hovering shows what the form is. |
 | `SentimentBadge` | A colored square, the score and a word, such as "+2 Leans positive". The words carry the meaning, so color isn't needed to read it. |
 | `SentimentScale` | The −5 to +5 bar on the filing page, filled from zero toward the score. |
+
+## proxy.ts
+
+| Function | What it does |
+|---|---|
+| `proxy` | Renews the admin's session before each page loads, since Supabase sessions expire after an hour. Requests without a Supabase cookie, which is every public visitor, pass straight through. |
